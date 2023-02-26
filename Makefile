@@ -1,4 +1,4 @@
-.PHONY: all env clean
+.PHONY: all env clean chr
 
 EXT=
 ifeq ($(OS),Windows_NT)
@@ -9,6 +9,7 @@ CHRUTIL = go-nes/bin/chrutil$(EXT)
 CA = cc65/bin/ca65$(EXT)
 LD = cc65/bin/ld65$(EXT)
 
+NAME = snake
 NESCFG = nes_nrom.cfg
 CAFLAGS = -g -t nes
 LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
@@ -16,8 +17,9 @@ LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
 SOURCES = \
 	main.asm
 
-all: env bin/snake.nes
+all: env chr bin/snake.nes
 env: $(CA) $(LD) $(CHRUTIL) bin/
+chr: pattern-a.chr
 
 clean:
 	-rm bin/* *.chr
@@ -32,11 +34,14 @@ bin/:
 bin/snake.nes: bin/main.o
 	$(LD) $(LDFLAGS) -o $@ $^
 
-bin/main.o: $(SOURCES)
+bin/main.o: $(SOURCES) $(CHR)
 	$(CA) $(CAFLAGS) -o $@ main.asm
 
-%.chr: images/*.bmp
+%.chr: images/%.bmp
 	$(CHRUTIL) $< -o $@
+
+%.bmp: images/%.aseprite
+	aseprite -b $< --save-as $@
 
 $(CHRUTIL):
 	$(MAKE) -C go-nes/ bin/chrutil$(EXT)
