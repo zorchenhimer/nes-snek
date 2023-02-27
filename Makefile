@@ -15,14 +15,15 @@ CAFLAGS = -g -t nes
 LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
 
 SOURCES = \
-	main.asm
+	main.asm \
+	playfield.i
 
 all: env chr bin/snake.nes
 env: $(CA) $(LD) $(CHRUTIL) bin/
 chr: pattern-a.chr
 
 clean:
-	-rm bin/* *.chr
+	-rm bin/* *.chr *.i
 
 cleanall: clean
 	-$(MAKE) -C go-nes/ clean
@@ -37,11 +38,17 @@ bin/snake.nes: bin/main.o
 bin/main.o: $(SOURCES) $(CHR)
 	$(CA) $(CAFLAGS) -o $@ main.asm
 
+pattern-a.chr: images/background-tiles.bmp
+	$(CHRUTIL) $< -o $@ --remove-duplicates
+
 %.chr: images/%.bmp
 	$(CHRUTIL) $< -o $@
 
-%.bmp: images/%.aseprite
+images/%.bmp: images/%.aseprite
 	aseprite -b $< --save-as $@
+
+playfield.i: layouts/playfield.tmx
+	cd layouts && go run ../convert-map.go playfield.tmx ../playfield.i
 
 $(CHRUTIL):
 	$(MAKE) -C go-nes/ bin/chrutil$(EXT)

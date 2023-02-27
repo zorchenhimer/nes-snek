@@ -35,6 +35,9 @@ func main() {
 
 	vals := []string{}
 	for _, d := range mapData.Layers[0].Data {
+		if d > 0 {
+			d -= 1
+		}
 		vals = append(vals, fmt.Sprintf("$%02X", d))
 	}
 	fmt.Fprintln(output, strings.Join(vals, ", "))

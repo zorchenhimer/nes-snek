@@ -15,7 +15,13 @@ nes2end
 Sleeping: .res 1
 AddressPointer: .res 2
 
+TmpX: .res 1
+TmpY: .res 1
+
 .segment "OAM"
+SpriteZero: .res 4
+Sprites: .res (4 * 63)
+
 .segment "BSS"
 
 .segment "VECTORS0"
@@ -99,10 +105,52 @@ RESET:
     bit $2002
     bpl :-
 
+    ; Clear sprites
+    ldx #0
+    lda #$FF
+:
+    sta $200, x
+    inx
+    bne :-
+
     lda #$00
     sta $2003
     lda #$02
     sta $4014
+
+    ; Write initial palette values
+    lda #$3F
+    sta $2006
+    lda #$00
+    sta $2006
+    ldx #0
+:
+    lda Palette_BG, x
+    sta $2007
+    inx
+    cpx #16
+    bne :-
+
+    ldx #0
+:
+    lda Palette_SP, x
+    sta $2007
+    inx
+    cpx #16
+    bne :-
+
+    lda #$23
+    sta $2006
+    lda #$C0
+    sta $2006
+
+    ; Set the attr table to something
+    ldy #64
+    lda #$FF
+:
+    sta $2007
+    dey
+    bne :-
 
     jsr DrawPlayfield
 
@@ -139,21 +187,54 @@ DrawPlayfield:
     lda #$00
     sta $2006
 
+    lda #0
+    sta TmpX
+@metaRows:
+
     ldy #0
-@loop:
+@firstRow:
     lda (AddressPointer), y
-    cmp #$FF
-    beq @done
+    asl a
+    asl a
+    tax
+    lda MetaTileIDs, x
+    sta $2007
+    lda MetaTileIDs+1, x
     sta $2007
     iny
-    bne @loop
-    inc AddressPointer+1
-    jmp @loop
-@done:
+    cpy #16
+    bne @firstRow
 
-    lda #.hibyte(PlayfieldAttr)
+    ldy #0
+@secondRow:
+    lda (AddressPointer), y
+    asl a
+    asl a
+    tax
+    lda MetaTileIDs+2, x
+    sta $2007
+    lda MetaTileIDs+3, x
+    sta $2007
+    iny
+    cpy #16
+    bne @secondRow
+
+    lda #16
+    clc
+    adc AddressPointer+0
+    sta AddressPointer+0
+    lda #0
+    adc AddressPointer+1
     sta AddressPointer+1
-    lda #.lobyte(PlayfieldAttr)
+
+    inc TmpX
+    lda TmpX
+    cmp #15
+    bne @metaRows
+
+    lda #.hibyte(PlayfieldData)
+    sta AddressPointer+1
+    lda #.lobyte(PlayfieldData)
     sta AddressPointer+0
 
     lda #$23
@@ -162,18 +243,117 @@ DrawPlayfield:
     sta $2006
 
     ldy #0
+    sty TmpX
 @loopAttr:
+    lda #0
+    sta TmpY ; tmp attr value
+
     lda (AddressPointer), y
-    sta $2007
+    tax
+    lda MetaTileAttr, x
+    sta TmpY
     iny
-    cpy #64
+
+    lda (AddressPointer), y
+    tax
+    lda MetaTileAttr, x
+    asl a
+    asl a
+    ora TmpY
+    sta TmpY
+    dey
+    tya
+    clc
+    adc #16
+    tay
+
+    lda (AddressPointer), y
+    tax
+    lda MetaTileAttr, x
+    asl a
+    asl a
+    asl a
+    asl a
+    ora TmpY
+    sta TmpY
+    iny
+
+    lda (AddressPointer), y
+    tax
+    lda MetaTileAttr, x
+    asl a
+    asl a
+    asl a
+    asl a
+    asl a
+    asl a
+    ora TmpY
+    sta $2007
+
+    tya
+    sec
+    sbc #15
+    tay
+
+    cpy #16
+    bne @loopAttr
+
+    clc
+    lda #32
+    adc AddressPointer+0
+    sta AddressPointer+0
+    lda #0
+    adc AddressPointer+1
+    sta AddressPointer+1
+
+    ldy #0
+
+    inc TmpX
+    lda TmpX
+    cmp #8
     bne @loopAttr
     rts
 
+Palette_BG:
+    .byte $01, $11, $21, $31
+    .byte $01, $09, $0C, $1C
+    .byte $01, $19, $0C, $1C
+    .byte $01, $0F, $0F, $31
+
+Palette_SP:
+    .byte $01, $15, $25, $35
+    .byte $01, $15, $25, $35
+    .byte $01, $15, $25, $35
+    .byte $01, $15, $25, $35
+
+MetaTileIDs:
+    .byte 0, 1, 0, 1
+    .byte 0, 0, 7, 7
+    .byte 2, 2, 0, 0
+    .byte 3, 0, 3, 0
+    .byte 4, 0, 0, 0
+    .byte 0, 5, 0, 0
+    .byte 0, 0, 0, 8
+    .byte 0, 0, 9, 0
+    .byte 0, 0, 0, 0
+
+    .byte 0, 0, 0, 0
+    .byte 6, 6, 6, 6
+
+MetaTileAttr:
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+    .byte 0
+
+    ; Tiled playfield
+    .byte 1
+    .byte 2
+
 PlayfieldData:
     .include "playfield.i"
-
-PlayfieldAttr:
-    .repeat 64
-        .byte $00
-    .endrepeat
