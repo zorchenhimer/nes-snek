@@ -49,7 +49,7 @@ bin/main.o: $(SOURCES) $(CHR)
 #	$(CHRUTIL) $< -o $@ --remove-duplicates --pad-tiles 16
 
 snek.chr: images/snek.bmp
-	$(CHRUTIL) $< -o $@ --pad-tiles 16
+	$(CHRUTIL) $< -o $@ --pad-tiles 32
 
 images/snek.bmp: images/snek.aseprite
 	aseprite -b $< \
