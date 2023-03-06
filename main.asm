@@ -14,9 +14,39 @@ nes2end
 .segment "ZEROPAGE"
 Sleeping: .res 1
 AddressPointer: .res 2
+AddressPointer2: .res 2
 
 TmpX: .res 1
 TmpY: .res 1
+TmpZ: .res 1
+
+; Tile IDs for the next update
+NextHead: .res 1
+PrevHead: .res 1 ; new tile for the prev head
+NextTail: .res 1
+PrevTail: .res 1 ; background tile ID
+
+NextHeadAddr: .res 2
+PrevHeadAddr: .res 2
+NextTailAddr: .res 2
+PrevTailAddr: .res 2
+
+; Direction of travel w/o input
+Direction: .res 1
+NextDirection: .res 1
+
+Controller: .res 1
+Controller_Old: .res 1
+
+SPEED = 10
+Count: .res 1
+
+.enum Dir
+Up = 0
+Right ; 01
+Down  ; 10
+Left  ; 11
+.endenum
 
 .segment "OAM"
 SpriteZero: .res 4
@@ -30,7 +60,32 @@ Sprites: .res (4 * 63)
     .word IRQ
 
 .segment "CHR0"
-    .incbin "pattern-a.chr"
+    ;.incbin "pattern-a.chr"
+@bgTiles:
+    .incbin "snek.chr"
+    .incbin "background-tiles.chr"
+
+.enum SNEK
+Corner_BR = 0
+Corner_BL
+Corner_TR
+Corner_TL
+Butt_Up
+Butt_Right
+Butt_Down
+Butt_Left
+Head_Up
+Head_Right
+Head_Down
+Head_Left
+
+Vertical    ; 0C = 0
+Horizontal  ; 0D = 1
+.endenum
+
+; Tiles for the playfield
+PlayfieldA = $26
+PlayfieldB = $27
 
 .segment "CHR1"
     ;.incbin "pattern-a.chr"
@@ -52,6 +107,11 @@ IRQ:
 
 NMI:
     pha
+    ;txa
+    ;pha
+    ;tya
+    ;pha
+
     lda #$FF
     sta Sleeping
 
@@ -64,6 +124,10 @@ NMI:
     sta $2005
     sta $2005
 
+    ;pla
+    ;tay
+    ;pla
+    ;tax
     pla
     rti
 
@@ -154,6 +218,33 @@ RESET:
 
     jsr DrawPlayfield
 
+    lda #$20
+    sta $2006
+    sta PrevTailAddr+1
+
+    lda #$A3
+    sta PrevTailAddr+0
+    sta $2006
+
+    lda #$20
+    sta NextHeadAddr+1
+    sta NextTailAddr+1
+    lda #$A5
+    sta NextHeadAddr+0
+    lda #$A4
+    sta NextTailAddr+0
+
+    lda #SNEK::Butt_Right ^ $10
+    sta $2007
+    lda #SNEK::Horizontal
+    sta $2007
+    lda #SNEK::Head_Right
+    sta $2007
+
+    lda #Dir::Right
+    sta Direction
+    sta NextDirection
+
     lda #0
     sta $2005
     sta $2005
@@ -164,9 +255,182 @@ RESET:
     lda #%0001_1110
     sta $2001
 
+    jsr WaitForNMI
+    jsr WaitForNMI
+
+    lda #SPEED
+    sta Count
+
 Frame:
+    ; Find next direction
+    jsr ReadControllers
+    lda #BUTTON_UP
+    and Controller
+    beq :+
+    lda Direction
+    cmp #Dir::Down
+    beq :+
+    lda #Dir::Up
+    sta NextDirection
+:
+    lda #BUTTON_RIGHT
+    and Controller
+    beq :+
+    lda Direction
+    cmp #Dir::Left
+    beq :+
+    lda #Dir::Right
+    sta NextDirection
+:
+    lda #BUTTON_DOWN
+    and Controller
+    beq :+
+    lda Direction
+    cmp #Dir::Up
+    beq :+
+    lda #Dir::Down
+    sta NextDirection
+:
+    lda #BUTTON_LEFT
+    and Controller
+    beq :+
+    lda Direction
+    cmp #Dir::Right
+    beq :+
+    lda #Dir::Left
+    sta NextDirection
+:
+
+    dec Count
+    beq :+
     jsr WaitForNMI
     jmp Frame
+
+:   lda #SPEED
+    sta Count
+
+    lda NextDirection
+    sta Direction
+
+    lda NextHeadAddr+0
+    sta PrevHeadAddr+0
+    lda NextHeadAddr+1
+    sta PrevHeadAddr+1
+
+    lda Direction
+    and #$03
+    cmp #Dir::Up
+    bne :+
+    lda #SNEK::Head_Up
+    sta NextHead
+    lda #32
+    jmp @dirSub
+
+:   cmp #Dir::Right
+    bne :+
+    lda #SNEK::Head_Right
+    sta NextHead
+    lda #1
+    jmp @dirAdd
+
+:   cmp #Dir::Down
+    bne :+
+    lda #SNEK::Head_Down
+    sta NextHead
+    lda #32
+    jmp @dirAdd
+
+:   lda #SNEK::Head_Left
+    sta NextHead
+    lda #1
+
+@dirSub:
+    sta TmpX
+    sec
+    lda NextHeadAddr+0
+    sbc TmpX
+    sta NextHeadAddr+0
+    lda NextHeadAddr+1
+    sbc #0
+    sta NextHeadAddr+1
+    jmp @dirDone
+
+@dirAdd:
+    clc
+    adc NextHeadAddr+0
+    sta NextHeadAddr+0
+    lda #0
+    adc NextHeadAddr+1
+    sta NextHeadAddr+1
+
+@dirDone:
+    jsr WaitForNMI
+
+    ; Look at next tile, make sure it isn't a snek
+    bit $2002
+    lda NextHeadAddr+1
+    sta $2006
+    lda NextHeadAddr+0
+    sta $2006
+    lda $2007
+    lda $2007
+    cmp #PlayfieldA
+    beq @tileA
+    cmp #PlayfieldB
+    beq @tileB
+    jmp @collide
+
+@tileA:
+    lda #$10
+    jmp @update
+
+@tileB:
+    lda #0
+
+@update:
+    ; no collide, write tiles
+    ; New head first
+    ora NextHead
+    ldx NextHeadAddr+1
+    stx $2006
+    ldx NextHeadAddr+0
+    stx $2006
+    sta $2007
+
+    ; remove old head
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    lda $2007
+    lda $2007
+    and #$03
+    sta PrevHead
+    cmp Direction
+    beq @straight
+    ; TODO: figure out corners
+
+
+@straight:
+    and #1
+    ora #SNEK::Vertical
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    sta $2007
+
+    lda #0
+    sta $2005
+    sta $2005
+
+    jmp Frame
+
+@collide:
+    ;;
+    ;; TODO: Collide
+    ;;
+    brk
 
 WaitForNMI:
 :   bit Sleeping
@@ -190,32 +454,54 @@ DrawPlayfield:
     lda #0
     sta TmpX
 @metaRows:
-
     ldy #0
+    sty TmpY
 @firstRow:
+    ;; lookup meta id in playfield
     lda (AddressPointer), y
     asl a
-    asl a
     tax
-    lda MetaTileIDs, x
-    sta $2007
-    lda MetaTileIDs+1, x
+    lda MetatileData+0, x
+    sta AddressPointer2+0
+    lda MetatileData+1, x
+    sta AddressPointer2+1
+
+    ldy #4
+    lda (AddressPointer2), y
+    ;lda MetaTileIDs, x
     sta $2007
     iny
+    lda (AddressPointer2), y
+    ;lda MetaTileIDs+1, x
+    sta $2007
+
+    inc TmpY
+    ldy TmpY
     cpy #16
     bne @firstRow
 
     ldy #0
+    sty TmpY
 @secondRow:
     lda (AddressPointer), y
     asl a
-    asl a
     tax
-    lda MetaTileIDs+2, x
-    sta $2007
-    lda MetaTileIDs+3, x
+    lda MetatileData+0, x
+    sta AddressPointer2+0
+    lda MetatileData+1, x
+    sta AddressPointer2+1
+
+    ldy #6
+    lda (AddressPointer2), y
+    ;lda MetaTileIDs+2, x
     sta $2007
     iny
+    lda (AddressPointer2), y
+    ;lda MetaTileIDs+3, x
+    sta $2007
+
+    inc TmpY
+    ldy TmpY
     cpy #16
     bne @secondRow
 
@@ -249,14 +535,14 @@ DrawPlayfield:
     sta TmpY ; tmp attr value
 
     lda (AddressPointer), y
-    tax
-    lda MetaTileAttr, x
+    jsr GetMetaPalette
+
     sta TmpY
     iny
 
     lda (AddressPointer), y
-    tax
-    lda MetaTileAttr, x
+    jsr GetMetaPalette
+
     asl a
     asl a
     ora TmpY
@@ -268,8 +554,8 @@ DrawPlayfield:
     tay
 
     lda (AddressPointer), y
-    tax
-    lda MetaTileAttr, x
+    jsr GetMetaPalette
+
     asl a
     asl a
     asl a
@@ -279,8 +565,8 @@ DrawPlayfield:
     iny
 
     lda (AddressPointer), y
-    tax
-    lda MetaTileAttr, x
+    jsr GetMetaPalette
+
     asl a
     asl a
     asl a
@@ -314,46 +600,51 @@ DrawPlayfield:
     bne @loopAttr
     rts
 
+; Expects metatile ID in A
+; Returns palette value in A
+GetMetaPalette:
+    asl a
+    tax
+
+    lda MetatileData+0, x
+    sta AddressPointer2+0
+    lda MetatileData+1, x
+    sta AddressPointer2+1
+
+    sty TmpZ
+    ldy #2
+    lda (AddressPointer2), y
+    ldy TmpZ
+    rts
+
 Palette_BG:
-    .byte $01, $11, $21, $31
-    .byte $01, $09, $0C, $1C
-    .byte $01, $19, $0C, $1C
-    .byte $01, $0F, $0F, $31
+    .byte $19, $21, $11, $01
+    .byte $19, $09, $17, $27
+    .byte $19, $19, $0C, $1C
+    .byte $19, $0F, $0F, $31
 
 Palette_SP:
-    .byte $01, $15, $25, $35
-    .byte $01, $15, $25, $35
-    .byte $01, $15, $25, $35
-    .byte $01, $15, $25, $35
+    .byte $19, $15, $25, $35
+    .byte $19, $15, $25, $35
+    .byte $19, $15, $25, $35
+    .byte $19, $15, $25, $35
 
-MetaTileIDs:
-    .byte 0, 1, 0, 1
-    .byte 0, 0, 7, 7
-    .byte 2, 2, 0, 0
-    .byte 3, 0, 3, 0
-    .byte 4, 0, 0, 0
-    .byte 0, 5, 0, 0
-    .byte 0, 0, 0, 8
-    .byte 0, 0, 9, 0
-    .byte 0, 0, 0, 0
+; Lookup tables for the playfield.  Address
+; is the start of the PPU row.
+PlayfieldAddrHi:
+    .repeat 20, i
+        .byte .hibyte($2082+(i*32))
+    .endrepeat
 
-    .byte 0, 0, 0, 0
-    .byte 6, 6, 6, 6
-
-MetaTileAttr:
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-
-    ; Tiled playfield
-    .byte 1
-    .byte 2
+PlayfieldAddrLo:
+    .repeat 20, i
+        .byte .lobyte($2082+(i*32))
+    .endrepeat
 
 PlayfieldData:
     .include "playfield.i"
+
+MetatileData:
+    .include "background-tiles.i"
+
+    .include "utils.asm"

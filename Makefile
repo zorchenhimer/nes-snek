@@ -6,8 +6,9 @@ EXT=.exe
 endif
 
 CHRUTIL = go-nes/bin/chrutil$(EXT)
-CA = cc65/bin/ca65$(EXT)
-LD = cc65/bin/ld65$(EXT)
+METATILES = go-nes/bin/metatiles$(EXT)
+#CA = cc65/bin/ca65$(EXT)
+#LD = cc65/bin/ld65$(EXT)
 
 NAME = snake
 NESCFG = nes_nrom.cfg
@@ -16,33 +17,44 @@ LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
 
 SOURCES = \
 	main.asm \
-	playfield.i
+	playfield.i \
+	background-tiles.i
+
+CHR = background-tiles.chr snek.chr
 
 all: env chr bin/snake.nes
-env: $(CA) $(LD) $(CHRUTIL) bin/
-chr: pattern-a.chr
+env: $(METATILES) $(CHRUTIL) bin/
 
 clean:
 	-rm bin/* *.chr *.i
 
 cleanall: clean
+	-rm images/*.bmp
 	-$(MAKE) -C go-nes/ clean
-	-$(MAKE) -C cc65/ clean
+#	-$(MAKE) -C cc65/ clean
 
 bin/:
 	-mkdir bin
 
 bin/snake.nes: bin/main.o
-	$(LD) $(LDFLAGS) -o $@ $^
+	ld65 $(LDFLAGS) -o $@ $^
 
 bin/main.o: $(SOURCES) $(CHR)
-	$(CA) $(CAFLAGS) -o $@ main.asm
+	ca65 $(CAFLAGS) -o $@ main.asm
 
-pattern-a.chr: images/background-tiles.bmp
-	$(CHRUTIL) $< -o $@ --remove-duplicates
+#%.chr: images/%.bmp
+#	$(CHRUTIL) $< -o $@ --remove-duplicates
 
-%.chr: images/%.bmp
-	$(CHRUTIL) $< -o $@
+#background-tiles.chr: images/background-tiles.bmp
+#	$(CHRUTIL) $< -o $@ --remove-duplicates --pad-tiles 16
+
+snek.chr: images/snek.bmp
+	$(CHRUTIL) $< -o $@ --pad-tiles 16
+
+images/snek.bmp: images/snek.aseprite
+	aseprite -b $< \
+		--crop 0,0,128,16 \
+		--save-as $@
 
 images/%.bmp: images/%.aseprite
 	aseprite -b $< --save-as $@
@@ -50,11 +62,12 @@ images/%.bmp: images/%.aseprite
 playfield.i: layouts/playfield.tmx
 	cd layouts && go run ../convert-map.go playfield.tmx ../playfield.i
 
+background-tiles.chr background-tiles.i: images/background-tiles.bmp
+	$(METATILES) $< $(basename $@).chr $(basename $@).i --offset 32
+
 $(CHRUTIL):
 	$(MAKE) -C go-nes/ bin/chrutil$(EXT)
 
-$(CA):
-	$(MAKE) -C cc65/ ca65
+$(METATILES):
+	$(MAKE) -C go-nes/ bin/metatiles$(EXT)
 
-$(LD):
-	$(MAKE) -C cc65/ ld65
