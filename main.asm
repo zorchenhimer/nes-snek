@@ -221,7 +221,6 @@ RESET:
     lda #$20
     sta $2006
     sta PrevTailAddr+1
-
     lda #$A3
     sta PrevTailAddr+0
     sta $2006
@@ -231,7 +230,7 @@ RESET:
     sta NextTailAddr+1
     lda #$A5
     sta NextHeadAddr+0
-    lda #$A4
+    lda #$A3
     sta NextTailAddr+0
 
     lda #SNEK::Butt_Right ^ $10
@@ -404,22 +403,89 @@ Frame:
     stx $2006
     lda $2007
     lda $2007
-    and #$03
     sta PrevHead
+    and #$03
     cmp Direction
     beq @straight
-    ; TODO: figure out corners
 
+    ; TODO: figure out corners
+    cmp #Dir::Up
+    bne @checkRight
+    lda Direction
+    cmp #Dir::Right
+    bne :+
+    ; up -> right
+    lda #SNEK::Corner_TL
+    jmp @cornerCheckDone
+:   ; up -> left
+    lda #SNEK::Corner_TR
+    jmp @cornerCheckDone
+
+@checkRight:
+    cmp #Dir::Right
+    bne @checkDown
+    lda Direction
+    cmp #Dir::Up
+    bne :+
+    ; right -> down
+    lda #SNEK::Corner_BR
+    jmp @cornerCheckDone
+:   ; right -> up
+    lda #SNEK::Corner_TR
+    jmp @cornerCheckDone
+
+@checkDown:
+    cmp #Dir::Down
+    bne @checkLeft
+    lda Direction
+    cmp #Dir::Right
+    bne :+
+    ; down -> right
+    lda #SNEK::Corner_BL
+    jmp @cornerCheckDone
+:   ; down -> left
+    lda #SNEK::Corner_BR
+    jmp @cornerCheckDone
+
+@checkLeft:
+    lda Direction
+    cmp #Dir::Up
+    bne :+
+    ; left -> down
+    lda #SNEK::Corner_BL
+    jmp @cornerCheckDone
+:   ; left -> up
+    lda #SNEK::Corner_TL
+
+@cornerCheckDone:
+    sta TmpX
+    lda PrevHead
+    and #$F0
+    ora TmpX
+
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    sta $2007
+    jmp @frameDone
 
 @straight:
+    ; need the A/B color for the background
     and #1
     ora #SNEK::Vertical
+    sta TmpX
+    lda PrevHead
+    and #$F0
+    ora TmpX
+
     ldx PrevHeadAddr+1
     stx $2006
     ldx PrevHeadAddr+0
     stx $2006
     sta $2007
 
+@frameDone:
     lda #0
     sta $2005
     sta $2005
