@@ -71,7 +71,9 @@ LogoSprites: .res (8*3*4)
 LogoXOffset = 96
 LogoYOffset = 63
 
-OtherSprites: .res 38*4
+OtherSpriteCount = 35
+OtherSprites: .res OtherSpriteCount*4
+CountSprites: .res 3*4
 Food: .res 4
 
 .segment "BSS"
@@ -295,22 +297,8 @@ TotalFood = (28*20)-3+1
     jsr NextSprite
     lda #SpriteId
     sta Food+1
-    lda #0
+    lda #1
     sta Food+2
-
-    lda #$23
-    sta $2006
-    lda #$43
-    sta $2006
-    lda BinOutput+0
-    ora #$F0
-    sta $2007
-    lda BinOutput+1
-    ora #$F0
-    sta $2007
-    lda BinOutput+2
-    ora #$F0
-    sta $2007
 
     ; SNEK
     jsr SetLogo
@@ -375,8 +363,21 @@ StartFrame:
     inx
     inx
     inx
-    cpx #(38*4)
+    cpx #(OtherSpriteCount*4)
     bne :-
+
+    ; Initial Countdown values
+    .repeat 3, i
+    lda #208
+    sta CountSprites+(4*i)+0
+    lda BinOutput+i
+    ora #$F0
+    sta CountSprites+(4*i)+1
+    lda #1
+    sta CountSprites+(4*i)+2
+    lda #(24 + (8*i))
+    sta CountSprites+(4*i)+3
+    .endrepeat
 
     jsr WaitForNMI
     jsr WriteGamePal
@@ -406,6 +407,13 @@ Frame:
     jmp Collide
 
 :
+
+    .repeat 3, i
+    lda BinOutput+i
+    ora #$F0
+    sta CountSprites+(4*i)+1
+    .endrepeat
+
     ; Find next direction
     jsr ReadControllers
     lda #BUTTON_UP
@@ -861,26 +869,7 @@ Frame:
 
     lda Elongate
     beq :+
-
-    lda #$23
-    sta $2006
-    lda #$43
-    sta $2006
-    lda BinOutput+0
-    ora #$F0
-    sta $2007
-    lda BinOutput+1
-    ora #$F0
-    sta $2007
-    lda BinOutput+2
-    ora #$F0
-    sta $2007
-    lda #0
-    sta $2005
-    sta $2005
-
     jsr NextSprite
-
 :   jmp Frame
 
 Collide:
@@ -1451,7 +1440,7 @@ GamePalette_BG:
 
 GamePalette_SP:
     .byte $19, $20, $17, $27
-    .byte $19, $20, $25, $35
+    .byte $19, $20, $10, $35
     .byte $19, $15, $25, $35
     .byte $19, $15, $25, $35
 
@@ -1463,7 +1452,7 @@ PausedPalette_BG:
 
 PausedPalette_SP:
     .byte $00, $10, $17, $27
-    .byte $00, $20, $0F, $0F
+    .byte $00, $20, $10, $0F
     .byte $00, $0F, $0F, $0F
     .byte $00, $0F, $0F, $0F
 
