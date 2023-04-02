@@ -44,6 +44,7 @@ Controller: .res 1
 Controller_Old: .res 1
 
 SPEED = 10
+FAST = 7
 Count: .res 1
 
 Elongate: .res 1
@@ -52,6 +53,8 @@ Elongate: .res 1
 SpriteAddrPointer: .res 2
 SpriteCoordPointer: .res 2
 Countdown: .res 2
+
+Survive: .res 1
 
 .enum Dir
 Up = 0
@@ -241,10 +244,13 @@ RESET:
     lda #$20
     sta NextHeadAddr+1
     sta TailAddr+1
+    sta $2006
+
     lda #$A5
     sta NextHeadAddr+0
     lda #$A3
     sta TailAddr+0
+    sta $2006
 
     lda #SNEK::Butt_Right ^ $10
     sta $2007
@@ -268,12 +274,13 @@ RESET:
     lda #SNEK::Head_Right
     sta (AddressPointer), y
 
-    lda #.lobyte(557)
+TotalFood = (28*20)-3+1
+    lda #.lobyte(TotalFood)
     sta Countdown+0
-    lda #.hibyte(557)
+    lda #.hibyte(TotalFood)
     sta Countdown+1
 
-    jsr DrawDebugSnek
+    ;jsr DrawDebugSnek
 
     lda #Dir::Right
     sta TailDirection
@@ -380,6 +387,25 @@ StartFrame:
     sta $2000
 
 Frame:
+
+    lda Survive
+    beq :+
+
+    sec
+    lda Countdown+0
+    sbc #1
+    sta Countdown+0
+    lda Countdown+1
+    sbc #1
+    sta Countdown+1
+    bne :+
+    lda Countdown+0
+    bne :+
+
+    ; game over, win
+    jmp Collide
+
+:
     ; Find next direction
     jsr ReadControllers
     lda #BUTTON_UP
@@ -431,219 +457,40 @@ Frame:
     beq :+
     jsr WaitForNMI
     jmp Frame
+:
 
-:   lda #SPEED
-    sta Count
+    lda Survive
+    bne :+
+    lda #SPEED
+    jmp :++
+:   lda #FAST
+:   sta Count
 
     lda NextDirection
     sta Direction
 
-    lda NextHeadAddr+0
-    sta PrevHeadAddr+0
-    lda NextHeadAddr+1
-    sta PrevHeadAddr+1
+    ;jsr WaitForNMI
 
-    lda Direction
-    and #$03
-    cmp #Dir::Up
-    bne :+
-    lda #SNEK::Head_Up
-    sta NextHead
-    lda #32
-    jmp @dirSub
-
-:   cmp #Dir::Right
-    bne :+
-    lda #SNEK::Head_Right
-    sta NextHead
-    lda #1
-    jmp @dirAdd
-
-:   cmp #Dir::Down
-    bne :+
-    lda #SNEK::Head_Down
-    sta NextHead
-    lda #32
-    jmp @dirAdd
-
-:   lda #SNEK::Head_Left
-    sta NextHead
-    lda #1
-
-@dirSub:
-    sta TmpX
-    sec
-    lda NextHeadAddr+0
-    sbc TmpX
-    sta NextHeadAddr+0
-    lda NextHeadAddr+1
-    sbc #0
-    sta NextHeadAddr+1
-    jmp @dirDone
-
-@dirAdd:
-    clc
-    adc NextHeadAddr+0
-    sta NextHeadAddr+0
-    lda #0
-    adc NextHeadAddr+1
-    sta NextHeadAddr+1
-
-@dirDone:
-    jsr WaitForNMI
-
-    lda NextHeadAddr+0
-    sta AddressPointer+0
-    lda NextHeadAddr+1
-    sec
-    sbc #$1C
-    sta AddressPointer+1
-    ldy #0
-    lda (AddressPointer), y
-    bpl :+
-    ; found an item
-    lda #1
-    sta Elongate
-    ;jsr NextSprite
-
-    ; Look at next tile, make sure it isn't a snek
-:   bit $2002
-    lda NextHeadAddr+1
-    sta $2006
-    lda NextHeadAddr+0
-    sta $2006
-    lda $2007
-    lda $2007
-    cmp #PlayfieldA
-    beq @tileA
-    cmp #PlayfieldB
-    beq @tileB
-    jmp @collide
-
-@tileA:
-    lda #$10
-    jmp @update
-
-@tileB:
-    lda #0
-
-@update:
-    ; no collide, write tiles
-    ; New head first
-    ora NextHead
-    ldx NextHeadAddr+1
-    stx $2006
-    ldx NextHeadAddr+0
-    stx $2006
-    sta $2007
-
-    ; Add head to ram
-    lda NextHeadAddr+0
-    sta AddressPointer+0
-    sec
-    lda NextHeadAddr+1
-    sbc #$1C    ; get in the proper range for ram (starts at $400)
-    sta AddressPointer+1
-    lda #1
-    ldy #0
-    sta (AddressPointer), y
-
-    ; remove old head
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    lda $2007
-    lda $2007
-    sta PrevHead
-    and #$03
-    cmp Direction
-    beq @straight
-
-    cmp #Dir::Up
-    bne @checkRight
-    lda Direction
-    cmp #Dir::Right
-    bne :+
-    ; up -> right
-    lda #SNEK::Corner_TL
-    jmp @cornerCheckDone
-:   ; up -> left
-    lda #SNEK::Corner_TR
-    jmp @cornerCheckDone
-
-@checkRight:
-    cmp #Dir::Right
-    bne @checkDown
-    lda Direction
-    cmp #Dir::Up
-    bne :+
-    ; right -> down
-    lda #SNEK::Corner_BR
-    jmp @cornerCheckDone
-:   ; right -> up
-    lda #SNEK::Corner_TR
-    jmp @cornerCheckDone
-
-@checkDown:
-    cmp #Dir::Down
-    bne @checkLeft
-    lda Direction
-    cmp #Dir::Right
-    bne :+
-    ; down -> right
-    lda #SNEK::Corner_BL
-    jmp @cornerCheckDone
-:   ; down -> left
-    lda #SNEK::Corner_BR
-    jmp @cornerCheckDone
-
-@checkLeft:
-    lda Direction
-    cmp #Dir::Up
-    bne :+
-    ; left -> down
-    lda #SNEK::Corner_BL
-    jmp @cornerCheckDone
-:   ; left -> up
-    lda #SNEK::Corner_TL
-
-@cornerCheckDone:
-    sta TmpX
-    lda PrevHead
-    and #$F0
-    ora TmpX
-
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    sta $2007
-    jmp @headDone
-
-@straight:
-    ; need the A/B color for the background
-    and #1
-    ora #SNEK::Vertical
-    sta TmpX
-    lda PrevHead
-    and #$F0
-    ora TmpX
-
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    sta $2007
-
-@headDone:
-
-; Now delete tail
-    lda Elongate
+    ; 0 = normal mode
+    ; 1 = survive, elongate once
+    ; 2 = survive
+    lda Survive
     beq :+
+    cmp #1
+    bne @notLonger
+    lda #2
+    sta Survive
+    jmp @tailDone
+:
+
+    lda Elongate
+    beq @notLonger
+    lda #0
+    sta Elongate
     jmp @tailDone
 
-:   lda TailAddr+1
+@notLonger:
+    lda TailAddr+1
     sta $2006
     lda TailAddr+0
     sta $2006
@@ -810,15 +657,210 @@ Frame:
 
 @tailDone:
 
-    ;lda #0
-    ;sta $2005
-    ;sta $2005
+; Move Head
+    lda NextHeadAddr+0
+    sta PrevHeadAddr+0
+    lda NextHeadAddr+1
+    sta PrevHeadAddr+1
+
+    lda Direction
+    and #$03
+    cmp #Dir::Up
+    bne :+
+    lda #SNEK::Head_Up
+    sta NextHead
+    lda #32
+    jmp @dirSub
+
+:   cmp #Dir::Right
+    bne :+
+    lda #SNEK::Head_Right
+    sta NextHead
+    lda #1
+    jmp @dirAdd
+
+:   cmp #Dir::Down
+    bne :+
+    lda #SNEK::Head_Down
+    sta NextHead
+    lda #32
+    jmp @dirAdd
+
+:   lda #SNEK::Head_Left
+    sta NextHead
+    lda #1
+
+@dirSub:
+    sta TmpX
+    sec
+    lda NextHeadAddr+0
+    sbc TmpX
+    sta NextHeadAddr+0
+    lda NextHeadAddr+1
+    sbc #0
+    sta NextHeadAddr+1
+    jmp @dirDone
+
+@dirAdd:
+    clc
+    adc NextHeadAddr+0
+    sta NextHeadAddr+0
+    lda #0
+    adc NextHeadAddr+1
+    sta NextHeadAddr+1
+
+@dirDone:
+
+    lda NextHeadAddr+0
+    sta AddressPointer+0
+    lda NextHeadAddr+1
+    sec
+    sbc #$1C
+    sta AddressPointer+1
+    ldy #0
+    lda (AddressPointer), y
+    bpl :+
+    ; found an item
+    lda #1
+    sta Elongate
+
+    ; Look at next tile, make sure it isn't a snek
+:   bit $2002
+    lda NextHeadAddr+1
+    sta $2006
+    lda NextHeadAddr+0
+    sta $2006
+    lda $2007
+    lda $2007
+    cmp #PlayfieldA
+    beq @tileA
+    cmp #PlayfieldB
+    beq @tileB
+    jmp Collide
+
+@tileA:
+    lda #$10
+    jmp @update
+
+@tileB:
+    lda #0
+
+@update:
+    ; no collide, write tiles
+    ; New head
+    ora NextHead
+    ldx NextHeadAddr+1
+    stx $2006
+    ldx NextHeadAddr+0
+    stx $2006
+    sta $2007
+
+    ; Add head to ram
+    lda NextHeadAddr+0
+    sta AddressPointer+0
+    sec
+    lda NextHeadAddr+1
+    sbc #$1C    ; get in the proper range for ram (starts at $400)
+    sta AddressPointer+1
+    lda #1
+    ldy #0
+    sta (AddressPointer), y
+
+    ; remove old head
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    lda $2007
+    lda $2007
+    sta PrevHead
+    and #$03
+    cmp Direction
+    beq @straight
+
+    cmp #Dir::Up
+    bne @checkRight
+    lda Direction
+    cmp #Dir::Right
+    bne :+
+    ; up -> right
+    lda #SNEK::Corner_TL
+    jmp @cornerCheckDone
+:   ; up -> left
+    lda #SNEK::Corner_TR
+    jmp @cornerCheckDone
+
+@checkRight:
+    cmp #Dir::Right
+    bne @checkDown
+    lda Direction
+    cmp #Dir::Up
+    bne :+
+    ; right -> down
+    lda #SNEK::Corner_BR
+    jmp @cornerCheckDone
+:   ; right -> up
+    lda #SNEK::Corner_TR
+    jmp @cornerCheckDone
+
+@checkDown:
+    cmp #Dir::Down
+    bne @checkLeft
+    lda Direction
+    cmp #Dir::Right
+    bne :+
+    ; down -> right
+    lda #SNEK::Corner_BL
+    jmp @cornerCheckDone
+:   ; down -> left
+    lda #SNEK::Corner_BR
+    jmp @cornerCheckDone
+
+@checkLeft:
+    lda Direction
+    cmp #Dir::Up
+    bne :+
+    ; left -> down
+    lda #SNEK::Corner_BL
+    jmp @cornerCheckDone
+:   ; left -> up
+    lda #SNEK::Corner_TL
+
+@cornerCheckDone:
+    sta TmpX
+    lda PrevHead
+    and #$F0
+    ora TmpX
+
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    sta $2007
+    jmp @headDone
+
+@straight:
+    ; need the A/B color for the background
+    and #1
+    ora #SNEK::Vertical
+    sta TmpX
+    lda PrevHead
+    and #$F0
+    ora TmpX
+
+    ldx PrevHeadAddr+1
+    stx $2006
+    ldx PrevHeadAddr+0
+    stx $2006
+    sta $2007
+
+@headDone:
+    lda #0
+    sta $2005
+    sta $2005
 
     lda Elongate
     beq :+
-    lda #0
-    sta Elongate
-    jsr NextSprite
 
     lda #$23
     sta $2006
@@ -833,14 +875,15 @@ Frame:
     lda BinOutput+2
     ora #$F0
     sta $2007
-
-:   lda #0
+    lda #0
     sta $2005
     sta $2005
 
-    jmp Frame
+    jsr NextSprite
 
-@collide:
+:   jmp Frame
+
+Collide:
     lda #%1000_0000
     sta $2000
 
@@ -1118,6 +1161,12 @@ IncSpritePointers:
 
 ; Draw a new sprite and add it to RAM
 NextSprite:
+    lda Survive
+    beq @next
+    jmp BinToDec
+    ;rts
+
+@next:
     ldy #0
     lda (SpriteAddrPointer), y
     sta AddressPointer+0
@@ -1129,7 +1178,7 @@ NextSprite:
     lda (AddressPointer), y
     beq :+
     jsr IncSpritePointers
-    jmp NextSprite
+    jmp @next
 :
 
     lda #$80
@@ -1154,9 +1203,9 @@ NextSprite:
     lda Countdown+0
     bne :+
     ;;
-    ;; No more spaces left
+    ;; No more spaces left; SURVIVE
     ;;
-    brk
+    jmp SetSurvive
 
 :   jsr IncSpritePointers
     lda Countdown+0
@@ -1306,11 +1355,13 @@ DrawDebugSnek:
     sta $2007
     lda #$87
     sta $2007
+    lda #$86
+    sta $2007
     lda #SNEK::Butt_Right
     sta $2007
 
     lda #SNEK::Horizontal
-    .repeat 19
+    .repeat 18
     sta $2007
     .endrepeat
 
@@ -1359,7 +1410,7 @@ DrawDebugSnek:
     lda #$20
     sta TailAddr+1
     sta NextHeadAddr+1
-    lda #$89
+    lda #$8A
     sta TailAddr+0
     lda #$86
     sta NextHeadAddr+0
@@ -1375,8 +1426,21 @@ DrawDebugSnek:
 
     lda #0
     sta Countdown+1
-    lda #2
+    lda #3+1
     sta Countdown+0
+    rts
+
+SetSurvive:
+    lda #1
+    sta Survive
+    lda #60
+    sta Countdown+0
+    lda #0
+    sta Countdown+1
+    lda #FAST
+    sta Count
+    lda #$FE
+    sta Food+0
     rts
 
 GamePalette_BG:
