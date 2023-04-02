@@ -18,7 +18,7 @@ ReadControllers:
     rts
 
 ; Was a button pressed this frame?
-ButtonPressedP1:
+ButtonPressed:
     sta TmpX
     and Controller
     sta TmpY

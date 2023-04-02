@@ -3,11 +3,65 @@
         "height": 4300,
         "width": 2
     },
+    "activeFile": "",
+    "expandedProjectPaths": [
+    ],
+    "fileStates": {
+        "../layouts-old/attributes.tsx": {
+            "scaleInDock": 1
+        },
+        "../layouts-old/pattern-a.tsx": {
+            "scaleInDock": 1
+        },
+        "../layouts-old/playfield.tmx": {
+            "scale": 2.4383333333333335,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 126.52084757347913,
+                "y": 121.80451127819548
+            }
+        },
+        "/win/code/nes/brick_half.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1
+        },
+        "/win/code/nes/candelabra.tmx": {
+            "scale": 1.1429687499999999,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 64.74367737525637,
+                "y": -254.6001367053999
+            }
+        },
+        "/win/code/nes/candelara.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1
+        },
+        "background-tiles.tsx": {
+            "scaleInDock": 2
+        },
+        "playfield.tmx": {
+            "scale": 3.5862499999999997,
+            "selectedLayer": -1,
+            "viewCenter": {
+                "x": 103.03241547577555,
+                "y": 112.65249215754619
+            }
+        }
+    },
     "last.imagePath": "/home/nick/code/nes/nes-snake/images",
     "map.height": 15,
     "map.lastUsedFormat": "tmx",
     "map.tileHeight": 16,
     "map.tileWidth": 16,
     "map.width": 16,
+    "openFiles": [
+    ],
+    "project": "",
+    "recentFiles": [
+        "playfield.tmx",
+        "../layouts-old/playfield.tmx",
+        "/win/code/nes/candelabra.tmx"
+    ],
     "tileset.lastUsedFormat": "tsx"
 }

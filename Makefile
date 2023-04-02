@@ -18,9 +18,10 @@ LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
 SOURCES = \
 	main.asm \
 	playfield.i \
-	background-tiles.i
+	background-tiles.i \
+	rand.i
 
-CHR = background-tiles.chr snek.chr
+CHR = background-tiles.chr snek.chr font.chr logo.chr hex.chr
 
 all: env chr bin/snake.nes
 env: $(METATILES) $(CHRUTIL) bin/
@@ -42,19 +43,22 @@ bin/snake.nes: bin/main.o
 bin/main.o: $(SOURCES) $(CHR)
 	ca65 $(CAFLAGS) -o $@ main.asm
 
-#%.chr: images/%.bmp
-#	$(CHRUTIL) $< -o $@ --remove-duplicates
-
-#background-tiles.chr: images/background-tiles.bmp
-#	$(CHRUTIL) $< -o $@ --remove-duplicates --pad-tiles 16
-
 snek.chr: images/snek.bmp
-	$(CHRUTIL) $< -o $@ --pad-tiles 32
+	$(CHRUTIL) $< -o $@ --pad-tiles 32 --tile-count 32
+
+font.chr: images/font.bmp
+	$(CHRUTIL) $< -o $@ --tile-offset 32 --tile-count 96
+
+logo.chr: images/snek.bmp
+	$(CHRUTIL) $< -o $@ --tile-offset 32 --remove-empty
+
+hex.chr: images/font.bmp
+	$(CHRUTIL) $< -o $@ --tile-offset 240 --tile-count 16
 
 images/snek.bmp: images/snek.aseprite
 	aseprite -b $< \
-		--crop 0,0,128,16 \
 		--save-as $@
+		#--crop 0,0,128,16 \
 
 images/%.bmp: images/%.aseprite
 	aseprite -b $< --save-as $@
@@ -62,8 +66,11 @@ images/%.bmp: images/%.aseprite
 playfield.i: layouts/playfield.tmx
 	cd layouts && go run ../convert-map.go playfield.tmx ../playfield.i
 
+rand.i: rand.go
+	go run $<
+
 background-tiles.chr background-tiles.i: images/background-tiles.bmp
-	$(METATILES) $< $(basename $@).chr $(basename $@).i --offset 32
+	$(METATILES) $< $(basename $@).chr $(basename $@).i --offset 128 --pad 16
 
 $(CHRUTIL):
 	$(MAKE) -C go-nes/ bin/chrutil$(EXT)
