@@ -48,6 +48,7 @@ FAST = 7
 Count: .res 1
 
 Elongate: .res 1
+Collided: .res 1
 
 ; address pointer into SpriteLookup
 SpriteAddrPointer: .res 2
@@ -744,7 +745,9 @@ Frame:
     beq @tileA
     cmp #PlayfieldB
     beq @tileB
-    jmp Collide
+    ldy #1
+    sty Collided
+    and #$F0
 
 @tileA:
     lda #$10
@@ -863,6 +866,11 @@ Frame:
     sta $2007
 
 @headDone:
+    lda Collided
+    beq :+
+    jmp Collide
+:
+
     lda #0
     sta $2005
     sta $2005
