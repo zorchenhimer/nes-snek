@@ -454,14 +454,6 @@ Frame:
     sta NextDirection
 :
 
-    lda #BUTTON_A
-    and Controller
-    beq :+
-
-    lda #1
-    sta Elongate
-:
-
     dec Count
     beq :+
     jsr WaitForNMI
