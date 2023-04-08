@@ -37,7 +37,7 @@ the command `git checkout -- *.inc` will restore these files.
 
 ## Buttons
 
-Change the snake's direction with the D-pad.  The A and B buttons have no
+Change the snek's direction with the D-pad.  The A and B buttons have no
 function.
 
 ## Aseprite

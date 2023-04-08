@@ -8,7 +8,7 @@ endif
 CHRUTIL = go-nes/bin/chrutil$(EXT)
 METATILES = go-nes/bin/metatiles$(EXT)
 
-NAME = snake
+NAME = snek
 NESCFG = nes_nrom.cfg
 CAFLAGS = -g -t nes
 LDFLAGS = -C $(NESCFG) --dbgfile bin/$(NAME).dbg -m bin/$(NAME).map
@@ -21,7 +21,7 @@ SOURCES = \
 
 CHR = background-tiles.chr snek.chr font.chr logo.chr hex.chr
 
-all: env chr bin/snake.nes
+all: env chr bin/snek.nes
 env: $(METATILES) $(CHRUTIL) bin/
 
 clean:
@@ -34,7 +34,7 @@ cleanall: clean
 bin/:
 	-mkdir bin
 
-bin/snake.nes: bin/main.o
+bin/snek.nes: bin/main.o
 	ld65 $(LDFLAGS) -o $@ $^
 
 bin/main.o: $(SOURCES) $(CHR)
