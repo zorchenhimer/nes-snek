@@ -1480,11 +1480,11 @@ MetatileData:
     .word 0
     .endrepeat
 SpriteLookup:
-    .include "rand.i"
+    .include "rand.inc"
     .word 0
 
 SpriteCoords:
-    .include "coords.i"
+    .include "coords.inc"
     .word 0
 
 LogoIds:

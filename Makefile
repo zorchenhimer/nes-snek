@@ -7,8 +7,6 @@ endif
 
 CHRUTIL = go-nes/bin/chrutil$(EXT)
 METATILES = go-nes/bin/metatiles$(EXT)
-#CA = cc65/bin/ca65$(EXT)
-#LD = cc65/bin/ld65$(EXT)
 
 NAME = snake
 NESCFG = nes_nrom.cfg
@@ -19,7 +17,7 @@ SOURCES = \
 	main.asm \
 	playfield.i \
 	background-tiles.i \
-	rand.i
+	rand.inc coords.inc
 
 CHR = background-tiles.chr snek.chr font.chr logo.chr hex.chr
 
@@ -30,9 +28,8 @@ clean:
 	-rm bin/* *.chr *.i
 
 cleanall: clean
-	-rm images/*.bmp
+	-rm images/*.bmp *.inc
 	-$(MAKE) -C go-nes/ clean
-#	-$(MAKE) -C cc65/ clean
 
 bin/:
 	-mkdir bin
@@ -58,7 +55,6 @@ hex.chr: images/font.bmp
 images/snek.bmp: images/snek.aseprite
 	aseprite -b $< \
 		--save-as $@
-		#--crop 0,0,128,16 \
 
 images/%.bmp: images/%.aseprite
 	aseprite -b $< --save-as $@
@@ -66,7 +62,7 @@ images/%.bmp: images/%.aseprite
 playfield.i: layouts/playfield.tmx
 	cd layouts && go run ../convert-map.go playfield.tmx ../playfield.i
 
-rand.i: rand.go
+rand.inc corods.inc: rand.go
 	go run $<
 
 background-tiles.chr background-tiles.i: images/background-tiles.bmp
