@@ -56,6 +56,7 @@ SpriteCoordPointer: .res 2
 Countdown: .res 2
 
 Survive: .res 1
+IsPaused: .res 1
 
 .enum Dir
 Up = 0
@@ -151,6 +152,10 @@ IRQ:
 
 NMI:
     pha
+    txa
+    pha
+    tya
+    pha
 
     lda #$FF
     sta Sleeping
@@ -160,6 +165,16 @@ NMI:
     lda #$02
     sta $4014
 
+    lda IsPaused
+    beq @notPaused
+    jsr WritePausedPal
+    jmp @pauseDone
+
+@notPaused:
+    jsr WriteGamePal
+
+@pauseDone:
+
     lda #0
     sta $2005
     sta $2005
@@ -167,6 +182,10 @@ NMI:
     lda #%1000_0000
     sta $2000
 
+    pla
+    tay
+    pla
+    tax
     pla
     rti
 
@@ -294,13 +313,6 @@ TotalFood = (28*20)-3+1
 
     jsr ResetSpritePointers
 
-    ; Setup first pickup
-    jsr NextSprite
-    lda #SpriteId
-    sta Food+1
-    lda #1
-    sta Food+2
-
     ; SNEK
     jsr SetLogo
 
@@ -341,6 +353,9 @@ WordsXOffset = 8*1
     lda #%0001_1110
     sta $2001
 
+    lda #1
+    sta IsPaused
+
     jsr WaitForNMI
     jsr WaitForNMI
 
@@ -356,7 +371,7 @@ StartFrame:
     jsr WaitForNMI
     jmp StartFrame
 
-:   jsr ClearLogo
+:   jsr ClearSprites
     ldx #0
 :
     sta OtherSprites+0, x
@@ -379,6 +394,16 @@ StartFrame:
     lda #(24 + (8*i))
     sta CountSprites+(4*i)+3
     .endrepeat
+
+    ; Setup first pickup
+    jsr NextSprite
+    lda #SpriteId
+    sta Food+1
+    lda #1
+    sta Food+2
+
+    lda #0
+    sta IsPaused
 
     jsr WaitForNMI
     jsr WriteGamePal
@@ -417,6 +442,16 @@ Frame:
 
     ; Find next direction
     jsr ReadControllers
+
+    lda #BUTTON_START
+    jsr ButtonPressed
+    beq :+
+
+    lda #1
+    sta IsPaused
+    jsr WaitForNMI
+    jmp FramePaused
+:
     lda #BUTTON_UP
     jsr ButtonPressed
     beq :+
@@ -872,6 +907,22 @@ Frame:
     jsr NextSprite
 :   jmp Frame
 
+FramePaused:
+    jsr ReadControllers
+
+    lda #BUTTON_START
+    jsr ButtonPressed
+    beq :+
+
+    lda #0
+    sta IsPaused
+    jsr WaitForNMI
+    jmp Frame
+:
+
+    jsr WaitForNMI
+    jmp FramePaused
+
 Collide:
     lda #%1000_0000
     sta $2000
@@ -1234,17 +1285,20 @@ WriteGamePal:
     bne :-
     rts
 
-ClearLogo:
-    lda #$FE
+;ClearLogo:
+ClearSprites:
+    lda #$FF
     ldx #0
 :
     sta LogoSprites+0, x
     inx
+    sta LogoSprites+0, x
     inx
+    sta LogoSprites+0, x
     inx
+    sta LogoSprites+0, x
     inx
 
-    cpx #(8*3*4)
     bne :-
     rts
 
