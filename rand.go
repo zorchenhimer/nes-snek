@@ -36,29 +36,33 @@ func run() error {
 		coords[i], coords[j] = coords[j], coords[i]
 	})
 
-	file, err := os.Create("rand.i")
+	file, err := os.Create("rand.inc")
 	if err != nil {
-		return fmt.Errorf("unable to open rand.i: %w", err)
+		return fmt.Errorf("unable to open rand.inc: %w", err)
 	}
 	defer file.Close()
 
 	vals := []int{}
-	for y := 0; y < 20; y++ {
-		for x := 0; x < 28; x++ {
-			vals = append(vals, 0x400+((y+4)*32)+(x+2))
-		}
+	//for y := 0; y < 20; y++ {
+	//	for x := 0; x < 28; x++ {
+	//		vals = append(vals, ((y+4)*32)+(x+2))
+	//	}
+	//}
+	for i := 0; i < 20*28; i++ {
+		vals = append(vals, i)
 	}
+
 	if len(vals) != 560 {
 		return fmt.Errorf("vals slice wrong length: %d", len(vals))
 	}
 
 	for _, n := range nums {
-		fmt.Fprintf(file, ".word $%04X\n", vals[n])
+		fmt.Fprintf(file, ".word $%04X\n", 0x400+vals[n])
 	}
 
-	cfile, err := os.Create("coords.i")
+	cfile, err := os.Create("coords.inc")
 	if err != nil {
-		return fmt.Errorf("unable to open coords.i: %w", err)
+		return fmt.Errorf("unable to open coords.inc: %w", err)
 	}
 	defer cfile.Close()
 

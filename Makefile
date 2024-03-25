@@ -62,7 +62,7 @@ images/%.bmp: images/%.aseprite
 playfield.i: layouts/playfield.tmx
 	cd layouts && go run ../convert-map.go playfield.tmx ../playfield.i
 
-rand.inc corods.inc: rand.go
+rand.inc coords.inc: rand.go
 	go run $<
 
 background-tiles.chr background-tiles.i: images/background-tiles.bmp

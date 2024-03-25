@@ -16,7 +16,9 @@ nes2end
 Sleeping: .res 1
 AddressPointer: .res 2
 AddressPointer2: .res 2
+AddressPointer3: .res 2
 
+TmpA: .res 1
 TmpX: .res 1
 TmpY: .res 1
 TmpZ: .res 1
@@ -29,11 +31,11 @@ PrevHead: .res 1 ; new tile for the prev head
 NextTail: .res 1
 PrevTail: .res 1 ; background tile ID
 
-NextHeadAddr: .res 2
-PrevHeadAddr: .res 2
+;NextHeadAddr: .res 2
+;PrevHeadAddr: .res 2
 ;NextTailAddr: .res 2
 ;PrevTailAddr: .res 2
-TailAddr: .res 2
+;TailAddr: .res 2
 
 ; Direction of travel w/o input
 Direction: .res 1
@@ -58,6 +60,18 @@ Countdown: .res 2
 Survive: .res 1
 IsPaused: .res 1
 
+PPUBuffer: .res 10*3
+BufferIdx: .res 1
+
+SnekHeadX: .res 1
+SnekHeadY: .res 1
+
+SnekTailX: .res 1
+SnekTailY: .res 1
+
+PrevX: .res 1
+PrevY: .res 1
+
 .enum Dir
 Up = 0
 Right ; 01
@@ -76,12 +90,12 @@ LogoYOffset = 63
 OtherSpriteCount = 35
 OtherSprites: .res OtherSpriteCount*4
 CountSprites: .res 3*4
-Food: .res 4
+FoodSprite: .res 4
 
 .segment "BSS"
 
 .segment "PLAYFIELD" ; starts at $400
-Playfield: .res $400
+Playfield: .res 20*28
 
 .segment "VECTORS0"
     .word NMI
@@ -129,8 +143,11 @@ Horizontal  ; 0D = 1
 .endenum
 
 ; Tiles for the playfield
-PlayfieldA = $86
-PlayfieldB = $87
+PlayfieldA = $86 ; dark
+PlayfieldB = $87 ; light
+
+Playfield_Width = 28
+Playfield_Height = 20
 
 .segment "CHR1"
     ;.incbin "pattern-a.chr"
@@ -175,12 +192,83 @@ NMI:
 
 @pauseDone:
 
+    lda BufferIdx
+    beq @bufferDone
+    ldx #0
+@loop:
+    lda PPUBuffer, x
+    beq @bufferDone
+    sta TmpX
+    inx
+
+    ldy PPUBuffer, x
+    inx
+
+    clc
+    lda PlayfieldAddrLo, y
+    adc TmpX
+    sta AddressPointer3+0
+
+    lda PlayfieldAddrHi, y
+    adc #0
+    sta AddressPointer3+1
+
+    sta $2006
+    lda AddressPointer3+0
+    sta $2006
+
+    tya
+    eor TmpX
+    lsr a
+    and #$01
+    sta TmpX
+
+    lda PPUBuffer, x
+    bne :+
+    lda TmpX
+    ora #PlayfieldA
+    sta $2007
+    jmp :++
+
+:
+    and #$0F
+    sta TmpY
+    lda TmpX
+    eor #$01
+    asl a
+    asl a
+    asl a
+    asl a
+    ora TmpY
+    sta $2007
+:
+    inx
+
+    cpx #(10*3)
+    beq @bufferDone
+    jmp @loop
+
+@bufferDone:
     lda #0
     sta $2005
     sta $2005
 
     lda #%1000_0000
     sta $2000
+
+    lda #0
+    ldx #0
+:
+    sta PPUBuffer, x
+    inx
+    sta PPUBuffer, x
+    inx
+    sta PPUBuffer, x
+    inx
+    cpx #(10*3)
+    bne :-
+
+    sta BufferIdx
 
     pla
     tay
@@ -254,47 +342,7 @@ RESET:
     dey
     bne :-
 
-    jsr DrawPlayfield
-
-    ;lda #$20
-    ;sta $2006
-    ;sta TailAddr+1
-    ;lda #$A3
-    ;sta TailAddr+0
-    ;sta $2006
-
-    lda #$20
-    sta NextHeadAddr+1
-    sta TailAddr+1
-    sta $2006
-
-    lda #$A5
-    sta NextHeadAddr+0
-    lda #$A3
-    sta TailAddr+0
-    sta $2006
-
-    lda #SNEK::Butt_Right ^ $10
-    sta $2007
-    lda #SNEK::Horizontal
-    sta $2007
-    lda #SNEK::Head_Right
-    sta $2007
-
-    lda #$04
-    sta AddressPointer+1
-    lda #$A3
-    sta AddressPointer+0
-
-    ldy #0
-    lda #SNEK::Butt_Right
-    sta (AddressPointer), y
-    iny
-    lda #SNEK::Horizontal
-    sta (AddressPointer), y
-    iny
-    lda #SNEK::Head_Right
-    sta (AddressPointer), y
+    jsr DrawScreen
 
 TotalFood = (28*20)-3+1
     lda #.lobyte(TotalFood)
@@ -311,7 +359,9 @@ TotalFood = (28*20)-3+1
     sta Direction
     sta NextDirection
 
-    jsr ResetSpritePointers
+    ;jsr ResetSpritePointers
+    jsr ResetPlayfield
+    jsr RedrawPlayfield
 
     ; SNEK
     jsr SetLogo
@@ -344,6 +394,7 @@ WordsXOffset = 8*1
 
     jsr WritePausedPal
 
+    lda #0
     sta $2005
     sta $2005
 
@@ -395,12 +446,12 @@ StartFrame:
     sta CountSprites+(4*i)+3
     .endrepeat
 
-    ; Setup first pickup
-    jsr NextSprite
-    lda #SpriteId
-    sta Food+1
-    lda #1
-    sta Food+2
+    ;; Setup first pickup
+    ;jsr NextSprite
+    ;lda #SpriteId
+    ;sta FoodSprite+1
+    ;lda #1
+    ;sta FoodSprite+2
 
     lda #0
     sta IsPaused
@@ -433,17 +484,16 @@ Frame:
     jmp Collide
 
 :
-
     .repeat 3, i
     lda BinOutput+i
-    ora #$F0
+    ora #$30
     sta CountSprites+(4*i)+1
     .endrepeat
 
     ; Find next direction
     jsr ReadControllers
 
-    lda #BUTTON_START
+    lda #BUTTON_START ; start
     jsr ButtonPressed
     beq :+
 
@@ -452,7 +502,7 @@ Frame:
     jsr WaitForNMI
     jmp FramePaused
 :
-    lda #BUTTON_UP
+    lda #BUTTON_UP ; up
     jsr ButtonPressed
     beq :+
     lda Direction
@@ -461,7 +511,7 @@ Frame:
     lda #Dir::Up
     sta NextDirection
 :
-    lda #BUTTON_RIGHT
+    lda #BUTTON_RIGHT ; right
     jsr ButtonPressed
     beq :+
     lda Direction
@@ -470,7 +520,7 @@ Frame:
     lda #Dir::Right
     sta NextDirection
 :
-    lda #BUTTON_DOWN
+    lda #BUTTON_DOWN ; down
     jsr ButtonPressed
     beq :+
     lda Direction
@@ -479,7 +529,7 @@ Frame:
     lda #Dir::Down
     sta NextDirection
 :
-    lda #BUTTON_LEFT
+    lda #BUTTON_LEFT ; left
     jsr ButtonPressed
     beq :+
     lda Direction
@@ -526,178 +576,206 @@ Frame:
     jmp @tailDone
 
 @notLonger:
-    lda TailAddr+1
-    sta $2006
-    lda TailAddr+0
-    sta $2006
-    lda $2007
-    lda $2007
-    sta PrevTail
-    and #$F0
-    bne :+
-    ; light tile
-    ldx #PlayfieldB
-    jmp :++
-:
-    ; dark tile
-    ldx #PlayfieldA
-:
-    ; Write playfield tile
-    lda TailAddr+1
-    sta $2006
-    lda TailAddr+0
-    sta $2006
-    stx $2007
-
-    lda TailAddr+0
+    ldx SnekTailY
+    lda PlayfieldMemLo, x
     sta AddressPointer+0
-    sec
-    lda TailAddr+1
-    sbc #$1C
+    lda PlayfieldMemHi, x
     sta AddressPointer+1
+
+    ldy SnekTailX
+    lda (AddressPointer), y
+    and #$0F
+    sta PrevTail
+
+    ; clear out old tail
     lda #0
-    tay
     sta (AddressPointer), y
 
+    ; buffer the write
+    ldy BufferIdx
+
+    lda SnekTailX
+    sta PPUBuffer, y
+    iny
+
+    lda SnekTailY
+    sta PPUBuffer, y
+    iny
+
+    lda #0
+    sta PPUBuffer, y
+    iny
+    sty BufferIdx
+
+    ; figure out new X/Y
     lda PrevTail
     and #$03
-    sta PrevTail
+    ;sta PrevTail
     bne :+
     ; Up
-    lda #32
-    jmp @tailSub
+    dec SnekTailY
+    jmp @tailMathDone
 
 :   cmp #1
     bne :+
     ; right
-    lda #1
-    jmp @tailAdd
+    inc SnekTailX
+    jmp @tailMathDone
 
 :   cmp #2
     bne :+
     ; down
-    lda #32
-    jmp @tailAdd
-
-:   ; left
-    lda #1
-@tailSub:
-    sta TmpX
-    sec
-    lda TailAddr+0
-    sbc TmpX
-    sta TailAddr+0
-    lda TailAddr+1
-    sbc #0
-    sta TailAddr+1
+    inc SnekTailY
     jmp @tailMathDone
 
-@tailAdd:
-    clc
-    adc TailAddr+0
-    sta TailAddr+0
-    lda #0
-    adc TailAddr+1
-    sta TailAddr+1
+:   ; left
+    dec SnekTailX
 
 @tailMathDone:
     ; write the new tail in the correct direction
-    lda TailAddr+1
-    sta $2006
-    lda TailAddr+0
-    sta $2006
-    lda $2007
-    lda $2007
-    sta NextTail
+    ldx SnekTailY
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    ldy SnekTailX
+    lda (AddressPointer), y
     and #$0F
+    sta NextTail
     cmp #SNEK::Vertical
     beq :+
     cmp #SNEK::Horizontal
     bne @tailCorners
 
-:   lda NextTail
-    and #$F0
-    ora PrevTail
-    ora #%0000_00100
+:
+    lda PrevTail
+    ora #$10
+    sta (AddressPointer), y
+    pha
 
-    ldx TailAddr+1
-    stx $2006
-    ldx TailAddr+0
-    stx $2006
-    sta $2007
+    ldy BufferIdx
+    lda SnekTailX
+    sta PPUBuffer, y
+    iny
+
+    lda SnekTailY
+    sta PPUBuffer, y
+    iny
+
+    pla
+    sta PPUBuffer, y
+    iny
+    sty BufferIdx
+
     jmp @tailDone
 
 @tailCorners:
+    pha
+    lda PrevTail
+    and #$03
+    sta PrevTail
+    pla
+
+    ;
     ; tail tile in A, AND'd with $0F
-    cmp #SNEK::Corner_TR
+    cmp #SNEK::Corner_TR    ; Corner_TR
     bne :++
     lda PrevTail
-    cmp #Dir::Right
+    cmp #Dir::Right         ; Right
     bne :+
     ; right -> down
-    ldx #SNEK::Butt_Down
+    ldx #SNEK::Butt_Down    ; Butt_Down
     jmp @tailWrite
 
     ; up -> left
-:   ldx #SNEK::Butt_Left
+:   ldx #SNEK::Butt_Left    ; Butt_Left
     jmp @tailWrite
 
-:   cmp #SNEK::Corner_TL
+:   cmp #SNEK::Corner_TL    ; Corner_TL
     bne :++
     lda PrevTail
-    cmp #Dir::Left
+    cmp #Dir::Left          ; Left
     bne :+
     ; left -> down
-    ldx #SNEK::Butt_Down
+    ldx #SNEK::Butt_Down    ; Butt_Down
     jmp @tailWrite
 
     ; up -> right
-:   ldx #SNEK::Butt_Right
+:   ldx #SNEK::Butt_Right   ; Butt_Right
     jmp @tailWrite
 
-:   cmp #SNEK::Corner_BR
+:   cmp #SNEK::Corner_BR    ; Corner_BR
     bne :++
     lda PrevTail
-    cmp #Dir::Right
+    cmp #Dir::Right         ; Right
     bne :+
     ; right -> up
-    ldx #SNEK::Butt_Up
+    ldx #SNEK::Butt_Up      ; Butt_Up
     jmp @tailWrite
 
 :   ; down -> left
-    ldx #SNEK::Butt_Left
+    ldx #SNEK::Butt_Left    ; Butt_Left
     jmp @tailWrite
 
 :   ;bottom left corner
     lda PrevTail
-    cmp #Dir::Left
+    cmp #Dir::Left          ; Left
     bne :+
     ; left -> up
-    ldx #SNEK::Butt_Up
+    ldx #SNEK::Butt_Up      ; Butt_Up
     jmp @tailWrite
 
 :   ; down -> right
-    ldx #SNEK::Butt_Right
+    ldx #SNEK::Butt_Right   ; Butt_Right
 
 @tailWrite:
-    stx PrevTail
-    lda NextTail
-    and #$F0
-    ora PrevTail
-    tax
-    lda TailAddr+1
-    sta $2006
-    lda TailAddr+0
-    sta $2006
-    stx $2007
+    txa
+    pha
+    ldx SnekTailY
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    ldy SnekTailX
+    pla
+    pha
+    ora #$10
+    sta (AddressPointer), y
+
+    ldy BufferIdx
+    lda SnekTailX
+    sta PPUBuffer, y
+    iny
+
+    lda SnekTailY
+    sta PPUBuffer, y
+    iny
+
+    pla
+    sta PPUBuffer, y
+    iny
+    sty BufferIdx
 
 @tailDone:
 
 ; Move Head
-    lda NextHeadAddr+0
-    sta PrevHeadAddr+0
-    lda NextHeadAddr+1
-    sta PrevHeadAddr+1
+    ldx SnekHeadY
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    ldy SnekHeadX
+    lda (AddressPointer), y
+    and #$0F
+    sta PrevHead
+
+    lda SnekHeadX
+    sta PrevX
+    lda SnekHeadY
+    sta PrevY
 
     lda Direction
     and #$03
@@ -705,113 +783,69 @@ Frame:
     bne :+
     lda #SNEK::Head_Up
     sta NextHead
-    lda #32
-    jmp @dirSub
+    dec SnekHeadY
+    jmp @dirDone
 
 :   cmp #Dir::Right
     bne :+
     lda #SNEK::Head_Right
     sta NextHead
-    lda #1
-    jmp @dirAdd
+    inc SnekHeadX
+    jmp @dirDone
 
 :   cmp #Dir::Down
     bne :+
     lda #SNEK::Head_Down
     sta NextHead
-    lda #32
-    jmp @dirAdd
+    inc SnekHeadY
+    jmp @dirDone
 
 :   lda #SNEK::Head_Left
     sta NextHead
-    lda #1
-
-@dirSub:
-    sta TmpX
-    sec
-    lda NextHeadAddr+0
-    sbc TmpX
-    sta NextHeadAddr+0
-    lda NextHeadAddr+1
-    sbc #0
-    sta NextHeadAddr+1
-    jmp @dirDone
-
-@dirAdd:
-    clc
-    adc NextHeadAddr+0
-    sta NextHeadAddr+0
-    lda #0
-    adc NextHeadAddr+1
-    sta NextHeadAddr+1
+    dec SnekHeadX
 
 @dirDone:
-
-    lda NextHeadAddr+0
+    ldx SnekHeadY
+    lda PlayfieldMemLo, x
     sta AddressPointer+0
-    lda NextHeadAddr+1
-    sec
-    sbc #$1C
+    lda PlayfieldMemHi, x
     sta AddressPointer+1
-    ldy #0
+
+    ldy SnekHeadX
     lda (AddressPointer), y
     bpl :+
     ; found an item
-    lda #1
-    sta Elongate
+    inc Elongate
 
     ; Look at next tile, make sure it isn't a snek
-:   bit $2002
-    lda NextHeadAddr+1
-    sta $2006
-    lda NextHeadAddr+0
-    sta $2006
-    lda $2007
-    lda $2007
-    cmp #PlayfieldA
-    beq @tileA
-    cmp #PlayfieldB
-    beq @tileB
-    ldy #1
-    sty Collided
-    and #$F0
-
-@tileA:
-    lda #$10
-    jmp @update
-
-@tileB:
-    lda #0
+:
+    beq @update
+    jmp Collide
 
 @update:
     ; no collide, write tiles
     ; New head
-    ora NextHead
-    ldx NextHeadAddr+1
-    stx $2006
-    ldx NextHeadAddr+0
-    stx $2006
-    sta $2007
-
-    ; Add head to ram
-    lda NextHeadAddr+0
-    sta AddressPointer+0
-    sec
-    lda NextHeadAddr+1
-    sbc #$1C    ; get in the proper range for ram (starts at $400)
-    sta AddressPointer+1
-    lda #1
-    ldy #0
+    lda NextHead
+    pha
+    ora #$10
     sta (AddressPointer), y
 
+    ldy BufferIdx
+    lda SnekHeadX
+    sta PPUBuffer, y
+    iny
+
+    lda SnekHeadY
+    sta PPUBuffer, y
+    iny
+
+    pla
+    sta PPUBuffer, y
+    iny
+    sty BufferIdx
+
     ; remove old head
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    lda $2007
-    lda $2007
-    sta PrevHead
+    lda PrevHead
     and #$03
     cmp Direction
     beq @straight
@@ -865,47 +899,78 @@ Frame:
     lda #SNEK::Corner_TL
 
 @cornerCheckDone:
-    sta TmpX
-    lda PrevHead
-    and #$F0
-    ora TmpX
+    pha
 
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    sta $2007
+    ldx PrevY
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    pla
+    pha
+    ldy PrevX
+    ora #$10
+    sta (AddressPointer), y
+
     jmp @headDone
 
 @straight:
     ; need the A/B color for the background
     and #1
     ora #SNEK::Vertical
-    sta TmpX
-    lda PrevHead
-    and #$F0
-    ora TmpX
+    pha
 
-    ldx PrevHeadAddr+1
-    stx $2006
-    ldx PrevHeadAddr+0
-    stx $2006
-    sta $2007
+    ldx PrevY
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    pla
+    pha
+    ldy PrevX
+    ora #$10
+    sta (AddressPointer), y
 
 @headDone:
-    lda Collided
+    ldy BufferIdx
+
+    lda PrevX
+    sta PPUBuffer, y
+    iny
+
+    lda PrevY
+    sta PPUBuffer, y
+    iny
+
+    pla
+    sta PPUBuffer, y
+    iny
+    sty BufferIdx
+
+    lda SnekHeadY
+    bmi :+
+    cmp #Playfield_Height
     beq :+
-    jmp Collide
+    bcc :++
+:   jmp Collide
 :
 
-    lda #0
-    sta $2005
-    sta $2005
+    lda SnekHeadX
+    bmi :+
+    cmp #Playfield_Width
+    beq :+
+    bcc :++
+:   jmp Collide
+:
 
     lda Elongate
     beq :+
     jsr NextSprite
-:   jmp Frame
+:
+    jsr WaitForNMI
+    jmp Frame
 
 FramePaused:
     jsr ReadControllers
@@ -924,13 +989,6 @@ FramePaused:
     jmp FramePaused
 
 Collide:
-    lda #%1000_0000
-    sta $2000
-
-    lda #0
-    sta $2005
-    sta $2005
-
     jsr SetLogo
 
     ; Game
@@ -957,14 +1015,6 @@ Collide:
     .endrepeat
 
     jsr WaitForNMI
-    jsr WritePausedPal
-
-    lda #%1000_0000
-    sta $2000
-
-    lda #0
-    sta $2005
-    sta $2005
 
 DedFrame:
 
@@ -987,7 +1037,7 @@ WaitForNMI:
     sta Sleeping
     rts
 
-DrawPlayfield:
+DrawScreen:
     lda #.hibyte(PlayfieldData)
     sta AddressPointer+1
     lda #.lobyte(PlayfieldData)
@@ -1148,6 +1198,125 @@ DrawPlayfield:
     bne @loopAttr
     rts
 
+ResetPlayfield:
+    lda #0
+    ldx #0
+    ldy #140
+@clearLoop:
+    sta Playfield, x
+    sta Playfield+140, x
+    sta Playfield+280, x
+    sta Playfield+420, x
+    inx
+    dey
+    bne @clearLoop
+
+    lda #SNEK::Butt_Right
+    sta Playfield+(1*28)+1
+    lda #SNEK::Horizontal
+    sta Playfield+(1*28)+2
+    lda #SNEK::Head_Right
+    sta Playfield+(1*28)+3
+    ;               Y    X
+
+    lda #1
+    sta SnekHeadY
+    sta SnekTailX
+    sta SnekTailY
+
+    lda #3
+    sta SnekHeadX
+
+    jsr ResetSpritePointers
+    jsr NextSprite
+
+    rts
+
+RedrawPlayfield:
+
+    bit $2002
+
+    lda #0
+    sta TmpY
+@rowLoop:
+    lda #0
+    sta TmpX
+    ldx TmpY
+
+    lda PlayfieldMemLo, x
+    sta AddressPointer+0
+
+    lda PlayfieldMemHi, x
+    sta AddressPointer+1
+
+    ldy #0
+
+@colLoop:
+    lda (AddressPointer), y
+    beq @nextCol
+    bmi @nextCol
+    sta TmpA
+
+    clc
+    lda PlayfieldAddrLo, x
+    adc TmpX
+    sta AddressPointer2+0
+    lda PlayfieldAddrHi, x
+    adc #0
+    sta AddressPointer2+1
+
+    lda TmpX
+    lsr a
+    and #$01
+    sta TmpZ
+
+    lda TmpY
+    lsr a
+    and #$01
+    eor TmpZ
+    beq @dark
+    lda #$00
+    jmp :+
+@dark:
+    lda #$10
+:
+    ora TmpA
+    sta TmpZ
+
+    lda AddressPointer2+1
+    sta $2006
+    lda AddressPointer2+0
+    sta $2006
+    lda TmpZ
+    sta $2007
+
+@nextCol:
+    inc AddressPointer+0
+    bne :+
+    inc AddressPointer+1
+:
+    inc TmpX
+    lda TmpX
+    cmp #28
+    bne @colLoop
+
+    ; next row
+    inc TmpY
+    lda TmpY
+    cmp #20
+    bne @rowLoop
+    rts
+
+    clc
+    ldy SnekHeadY
+    lda PlayfieldMemLo, y
+    adc SnekHeadX
+    sta AddressPointer+0
+
+    lda PlayfieldMemHi, y
+    adc #0
+    sta AddressPointer+1
+
 ; Expects metatile ID in A
 ; Returns palette value in A
 GetMetaPalette:
@@ -1203,8 +1372,8 @@ IncSpritePointers:
 NextSprite:
     lda Survive
     beq @next
-    jmp BinToDec
-    ;rts
+    ;jmp BinToDec
+    rts
 
 @next:
     ldy #0
@@ -1216,18 +1385,23 @@ NextSprite:
     dey
     ldy #0
     lda (AddressPointer), y
-    beq :+
+    beq :+  ; make sure we have an empty tile
     jsr IncSpritePointers
     jmp @next
 :
 
+    lda #SpriteId
+    sta FoodSprite+1
+    lda #2
+    sta FoodSprite+2
+
     lda #$80
     sta (AddressPointer), y
     lda (SpriteCoordPointer), y
-    sta Food+0
+    sta FoodSprite+0
     iny
     lda (SpriteCoordPointer), y
-    sta Food+3
+    sta FoodSprite+3
 
     lda Countdown+0
     sec
@@ -1252,8 +1426,8 @@ NextSprite:
     sta TmpX
     lda Countdown+1
     sta TmpY
-    jmp BinToDec
-    ;rts
+    ;jmp BinToDec
+    rts
 
 WritePausedPal:
     lda #$3F
@@ -1379,100 +1553,6 @@ BinToDec:
     sta BinOutput+2
     rts
 
-DrawDebugSnek:
-    ; Top row, horiz with head & tail
-    lda #$20
-    sta $2006
-    lda #$82
-    sta $2006
-
-    lda #SNEK::Corner_TL
-    sta $2007
-    lda #SNEK::Horizontal
-    sta $2007
-    sta $2007
-    sta $2007
-    lda #SNEK::Head_Right
-    sta $2007
-    lda #$86
-    sta $2007
-    lda #$87
-    sta $2007
-    lda #$86
-    sta $2007
-    lda #SNEK::Butt_Right
-    sta $2007
-
-    lda #SNEK::Horizontal
-    .repeat 18
-    sta $2007
-    .endrepeat
-
-    lda #SNEK::Corner_TR
-    sta $2007
-
-    lda #$20
-    sta $2006
-    lda #$A2
-    sta $2006
-
-    lda #SNEK::Vertical
-    sta $2007
-
-    lda #SNEK::Corner_TL
-    ldy #SNEK::Corner_TR
-    .repeat 13
-    sta $2007
-    sty $2007
-    .endrepeat
-    ldy #SNEK::Vertical
-    sty $2007
-
-    .repeat 17, i
-    lda #.hibyte($20C2 + (i*32))
-    sta $2006
-    lda #.lobyte($20C2 + (i*32))
-    sta $2006
-    .repeat 28
-    sty $2007
-    .endrepeat
-    .endrepeat
-
-    lda #$22
-    sta $2006
-    lda #$E2
-    sta $2006
-
-    lda #SNEK::Corner_BL
-    ldy #SNEK::Corner_BR
-    .repeat 14
-    sta $2007
-    sty $2007
-    .endrepeat
-
-    lda #$20
-    sta TailAddr+1
-    sta NextHeadAddr+1
-    lda #$8A
-    sta TailAddr+0
-    lda #$86
-    sta NextHeadAddr+0
-
-    ldy #1
-    .repeat 5, i
-    sty $0482+i
-    .endrepeat
-
-    .repeat 630, i
-    sty $0489+i
-    .endrepeat
-
-    lda #0
-    sta Countdown+1
-    lda #3+1
-    sta Countdown+0
-    rts
-
 SetSurvive:
     lda #1
     sta Survive
@@ -1483,7 +1563,7 @@ SetSurvive:
     lda #FAST
     sta Count
     lda #$FE
-    sta Food+0
+    sta FoodSprite+0
     rts
 
 GamePalette_BG:
@@ -1495,20 +1575,22 @@ GamePalette_BG:
 GamePalette_SP:
     .byte $19, $20, $17, $27
     .byte $19, $20, $10, $35
+    .byte $19, $20, $10, $35
     .byte $19, $15, $25, $35
-    .byte $19, $15, $25, $35
+    ;.byte $19, $15, $25, $35
 
 PausedPalette_BG:
-    .byte $00, $00, $00, $2D
-    .byte $00, $2D, $10, $3D
-    .byte $00, $0F, $0F, $0F
-    .byte $00, $0F, $0F, $0F
+    .byte $10, $00, $00, $2D
+    .byte $10, $00, $0F, $10
+    ;.byte $00, $06, $16, $26
+    .byte $10, $0F, $0F, $0F
+    .byte $10, $0F, $0F, $0F
 
 PausedPalette_SP:
-    .byte $00, $10, $17, $27
-    .byte $00, $20, $10, $0F
-    .byte $00, $0F, $0F, $0F
-    .byte $00, $0F, $0F, $0F
+    .byte $10, $10, $17, $27
+    .byte $10, $17, $10, $0F
+    .byte $10, $00, $0F, $0F
+    .byte $10, $0F, $0F, $0F
 
 ; Lookup tables for the playfield.  Address
 ; is the start of the PPU row.
@@ -1522,6 +1604,16 @@ PlayfieldAddrLo:
         .byte .lobyte($2082+(i*32))
     .endrepeat
 
+PlayfieldMemHi:
+    .repeat 20, i
+        .byte .hibyte($0400+(i*28))
+    .endrepeat
+
+PlayfieldMemLo:
+    .repeat 20, i
+        .byte .lobyte($0400+(i*28))
+    .endrepeat
+
 PlayfieldData:
     .include "playfield.i"
 
@@ -1533,6 +1625,7 @@ MetatileData:
     .repeat (5*8)
     .word 0
     .endrepeat
+
 SpriteLookup:
     .include "rand.inc"
     .word 0
