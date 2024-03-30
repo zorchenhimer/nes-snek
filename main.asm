@@ -317,6 +317,7 @@ RESET:
     bit $2002
     bpl :-
 
+GameReset:
     ; Clear sprites
     ldx #0
     lda #$FF
@@ -1019,7 +1020,9 @@ DedFrame:
 :   jsr WaitForNMI
     lda #0
     sta $2000
-    jmp RESET
+    sta $2001
+
+    jmp GameReset
 
 WaitForNMI:
 :   bit Sleeping
