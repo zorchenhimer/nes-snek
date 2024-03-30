@@ -776,25 +776,34 @@ Frame:
     lda #SNEK::Head_Up
     sta NextHead
     dec SnekHeadY
-    jmp @dirDone
+    bpl @dirDone
+    jmp Collide
 
 :   cmp #Dir::Right
     bne :+
     lda #SNEK::Head_Right
     sta NextHead
     inc SnekHeadX
-    jmp @dirDone
+    lda SnekHeadX
+    cmp #Playfield_Width
+    bmi @dirDone
+    jmp Collide
 
 :   cmp #Dir::Down
     bne :+
     lda #SNEK::Head_Down
     sta NextHead
     inc SnekHeadY
-    jmp @dirDone
+    lda SnekHeadY
+    cmp #Playfield_Height
+    bmi @dirDone
+    jmp Collide
 
 :   lda #SNEK::Head_Left
     sta NextHead
     dec SnekHeadX
+    bpl @dirDone
+    jmp Collide
 
 @dirDone:
     ldx SnekHeadY
@@ -820,8 +829,8 @@ Frame:
     ; no collide, write tiles
     ; New head
     lda NextHead
-    pha
     ora #$10
+    pha
     sta (AddressPointer), y
 
     ldy BufferIdx
@@ -946,22 +955,6 @@ Frame:
     sta PPUBuffer, y
     iny
     sty BufferIdx
-
-    lda SnekHeadY
-    bmi :+
-    cmp #Playfield_Height
-    beq :+
-    bcc :++
-:   jmp Collide
-:
-
-    lda SnekHeadX
-    bmi :+
-    cmp #Playfield_Width
-    beq :+
-    bcc :++
-:   jmp Collide
-:
 
     lda Elongate
     beq :+
