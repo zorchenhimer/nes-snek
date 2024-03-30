@@ -193,11 +193,10 @@ NMI:
 @pauseDone:
 
     lda BufferIdx
-    beq @bufferDone
+    bmi @bufferDone
     ldx #0
 @loop:
     lda PPUBuffer, x
-    beq @bufferDone
     sta TmpX
     inx
 
@@ -244,6 +243,9 @@ NMI:
 :
     inx
 
+    cpx BufferIdx
+    beq @bufferDone
+
     cpx #(10*3)
     beq @bufferDone
     jmp @loop
@@ -256,7 +258,7 @@ NMI:
     lda #%1000_0000
     sta $2000
 
-    lda #0
+    lda #$FF
     ldx #0
 :
     sta PPUBuffer, x
@@ -394,6 +396,9 @@ WordsXOffset = 8*1
 
     jsr WritePausedPal
 
+    lda #$FF
+    sta BufferIdx
+
     lda #0
     sta $2005
     sta $2005
@@ -423,15 +428,6 @@ StartFrame:
     jmp StartFrame
 
 :   jsr ClearSprites
-    ldx #0
-:
-    sta OtherSprites+0, x
-    inx
-    inx
-    inx
-    inx
-    cpx #(OtherSpriteCount*4)
-    bne :-
 
     ; Initial Countdown values
     .repeat 3, i
@@ -445,13 +441,6 @@ StartFrame:
     lda #(24 + (8*i))
     sta CountSprites+(4*i)+3
     .endrepeat
-
-    ;; Setup first pickup
-    ;jsr NextSprite
-    ;lda #SpriteId
-    ;sta FoodSprite+1
-    ;lda #1
-    ;sta FoodSprite+2
 
     lda #0
     sta IsPaused
@@ -593,6 +582,9 @@ Frame:
 
     ; buffer the write
     ldy BufferIdx
+    bpl :+
+    iny
+:
 
     lda SnekTailX
     sta PPUBuffer, y
@@ -811,13 +803,15 @@ Frame:
     lda PlayfieldMemHi, x
     sta AddressPointer+1
 
+    ; Look at next tile, make sure it isn't a
+    ; snek or food
     ldy SnekHeadX
     lda (AddressPointer), y
     bpl :+
     ; found an item
     inc Elongate
+    jmp @update
 
-    ; Look at next tile, make sure it isn't a snek
 :
     beq @update
     jmp Collide
@@ -831,6 +825,9 @@ Frame:
     sta (AddressPointer), y
 
     ldy BufferIdx
+    bpl :+
+    iny
+:
     lda SnekHeadX
     sta PPUBuffer, y
     iny
@@ -945,6 +942,7 @@ Frame:
     iny
 
     pla
+    ora #$10
     sta PPUBuffer, y
     iny
     sty BufferIdx
@@ -1473,6 +1471,7 @@ ClearSprites:
     sta LogoSprites+0, x
     inx
 
+    cpx #(OtherSpriteCount*4)-4
     bne :-
     rts
 
